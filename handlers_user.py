@@ -214,52 +214,6 @@ async def show_weekly_pass(callback: CallbackQuery):
         parse_mode="HTML"
     )
     await callback.answer()
-
-@router.callback_query(F.data.regexp(r'^weekly_\d+$'))
-async def select_weekly_pass(callback: CallbackQuery, state: FSMContext):
-    """Haftalik/Oylik pass tanlash"""
-    try:
-        index = int(callback.data.split("_")[1])
-    except (IndexError, ValueError):
-        await callback.answer("❌ Xatolik!")
-        return
-    
-    from config import WEEKLY_PASS
-    
-    if index >= len(WEEKLY_PASS):
-        await callback.answer("❌ Paket topilmadi!")
-        return
-    
-    pass_item = WEEKLY_PASS[index]
-    pass_name = pass_item['name']
-    price = pass_item['price']
-    description = pass_item.get('description', '')
-    
-    temp_orders[callback.from_user.id] = {
-        "type": "weekly",
-        "diamonds": 0,
-        "price": price,
-        "pass_name": pass_name,
-        "description": description
-    }
-    
-    await callback.message.edit_text(
-        f"📦 <b>Siz tanladingiz:</b>\n\n"
-        f"🌟 {pass_name}\n"
-        f"📝 {description}\n"
-        f"💰 {price:,} so'm\n\n"
-        f"Paketni tasdiqlab, ID/SERVER kiriting.\n\n"
-        f"📌 <b>Avvalo ID va SERVER yuboring:</b>\n\n"
-        f"<code>123456789 3333</code>\n"
-        f"yoki\n"
-        f"<code>123456789 (3333)</code>\n\n"
-        f"‼️ <b>ID va Server toʻgʻri kiritilganiga ishonch hosil qiling.</b>",
-        parse_mode="HTML"
-    )
-    
-    await state.set_state(OrderStates.waiting_for_id_and_zone)
-    await callback.answer()
-
 @router.callback_query(F.data == "back_to_categories")
 async def back_to_categories(callback: CallbackQuery):
     """Kategoriyalarga qaytish"""
@@ -398,7 +352,6 @@ async def confirm_order(callback: CallbackQuery, bot):
     await callback.message.edit_text(payment_text, parse_mode="HTML")
     await callback.message.answer("📸 <b>Screenshot yuborishni kutmoqdamiz...</b>", parse_mode="HTML")
     await callback.answer()
-
 @router.message(F.photo)
 async def receive_screenshot(message: Message, bot):
     """Screenshot yoki Photo ID olish"""
@@ -437,17 +390,20 @@ async def receive_screenshot(message: Message, bot):
     
     from keyboards import admin_order_keyboard
     
-    # Paket turini aniqlash
+    # ✅ YANGILANDI: Paket turini aniqlash
     package_type = order_data.get('type', 'regular')
+    
     if package_type == 'double':
         package_info = f"2X {order_data['diamonds']} 💎"
     elif package_type == 'weekly':
         pass_name = order_data.get('pass_name', 'Pass')
+        quantity = order_data.get('quantity', 1)  # ✅ MIQDOR
         description = order_data.get('description', '')
-        if description:
-            package_info = f"🌟 {pass_name}\n📝 {description}"
+        
+        if quantity > 1:
+            package_info = f"🌟 {pass_name} x{quantity}\n📝 {description}"
         else:
-            package_info = f"🌟 {pass_name}"
+            package_info = f"🌟 {pass_name}\n📝 {description}"
     else:
         package_info = f"{order_data['diamonds']} 💎"
     
@@ -463,7 +419,7 @@ async def receive_screenshot(message: Message, bot):
         f"📸 Screenshot:"
     )
     
-    # ✅ BARCHA ADMINLARGA YUBORISH VA MESSAGE_ID SAQLASH
+    # BARCHA ADMINLARGA YUBORISH VA MESSAGE_ID SAQLASH
     for admin_id in ADMIN_IDS:
         try:
             sent_message = await bot.send_photo(
@@ -474,7 +430,6 @@ async def receive_screenshot(message: Message, bot):
                 parse_mode="HTML"
             )
             
-            # ✅ MESSAGE_ID NI SAQLASH
             await save_admin_notification(order_number, admin_id, sent_message.message_id)
             print(f"✅ Admin {admin_id} ga yuborildi, message_id={sent_message.message_id}")
             
@@ -900,3 +855,87 @@ async def get_photo_id(message: Message):
     if message.from_user.id in ADMIN_IDS:
         file_id = message.photo[-1].file_id
         await message.answer(f"File ID: <code>{file_id}</code>", parse_mode="HTML")
+        
+@router.callback_query(F.data.regexp(r'^weekly_\d+$'))
+async def select_weekly_pass(callback: CallbackQuery, state: FSMContext):
+    """Haftalik/Oylik pass tanlash - MIQDOR TANLASH"""
+    try:
+        index = int(callback.data.split("_")[1])
+    except (IndexError, ValueError):
+        await callback.answer("❌ Xatolik!")
+        return
+    
+    from config import WEEKLY_PASS
+    
+    if index >= len(WEEKLY_PASS):
+        await callback.answer("❌ Paket topilmadi!")
+        return
+    
+    pass_item = WEEKLY_PASS[index]
+    pass_name = pass_item['name']
+    price = pass_item['price']
+    description = pass_item.get('description', '')
+    
+    # ✅ YANGI: Miqdor tanlash klaviaturasi
+    from keyboards import quantity_keyboard
+    
+    await callback.message.edit_text(
+        f"🌟 <b>{pass_name}</b>\n\n"
+        f"📝 {description}\n"
+        f"💰 Narx: {price:,} so'm (1 dona)\n\n"
+        f"❓ <b>Nechta sotib olasiz?</b>\n"
+        f"(1 donadan 10 tagacha)",
+        reply_markup=quantity_keyboard(f"weekly_{index}", pass_name, price),
+        parse_mode="HTML"
+    )
+    
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(r'^qty_weekly_\d+_\d+$'))
+async def select_weekly_quantity(callback: CallbackQuery, state: FSMContext):
+    """Haftalik pass miqdorini tanlash"""
+    # qty_weekly_0_5 → weekly_0, quantity=5
+    parts = callback.data.split("_")
+    index = int(parts[2])
+    quantity = int(parts[3])
+    
+    from config import WEEKLY_PASS
+    
+    if index >= len(WEEKLY_PASS):
+        await callback.answer("❌ Paket topilmadi!")
+        return
+    
+    pass_item = WEEKLY_PASS[index]
+    pass_name = pass_item['name']
+    price_per_item = pass_item['price']
+    total_price = price_per_item * quantity
+    description = pass_item.get('description', '')
+    
+    # Temp order ga saqlash
+    temp_orders[callback.from_user.id] = {
+        "type": "weekly",
+        "diamonds": 0,
+        "price": total_price,
+        "pass_name": pass_name,
+        "description": description,
+        "quantity": quantity,  # ✅ MIQDOR QO'SHILDI
+        "price_per_item": price_per_item
+    }
+    
+    await callback.message.edit_text(
+        f"📦 <b>Siz tanladingiz:</b>\n\n"
+        f"🌟 {pass_name} x{quantity}\n"
+        f"📝 {description}\n"
+        f"💰 Narx: {price_per_item:,} so'm x {quantity} = {total_price:,} so'm\n\n"
+        f"Paketni tasdiqlab, ID/SERVER kiriting.\n\n"
+        f"📌 <b>Avvalo ID va SERVER yuboring:</b>\n\n"
+        f"<code>123456789 3333</code>\n"
+        f"yoki\n"
+        f"<code>123456789 (3333)</code>\n\n"
+        f"‼️ <b>ID va Server toʻgʻri kiritilganiga ishonch hosil qiling.</b>",
+        parse_mode="HTML"
+    )
+    
+    await state.set_state(OrderStates.waiting_for_id_and_zone)
+    await callback.answer()

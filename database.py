@@ -258,3 +258,21 @@ async def delete_admin_notifications(order_number: str):
             (order_number,)
         )
         await db.commit()
+        
+async def create_order(user_id: int, diamonds: int, price: int, player_id: str, zone_id: str, quantity: int = 1):
+    """Yangi buyurtma yaratish"""
+    async with aiosqlite.connect(DB_NAME) as db:
+        cursor = await db.execute("SELECT COUNT(*) FROM orders")
+        count = (await cursor.fetchone())[0]
+        order_number = f"ORD{count + 1:04d}"
+        
+        # Agar kerak bo'lsa, quantity ni ham saqlash mumkin
+        # Buning uchun orders table ga quantity column qo'shish kerak
+        
+        await db.execute("""
+            INSERT INTO orders (order_number, user_id, diamonds, price, player_id, zone_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (order_number, user_id, diamonds, price, player_id, zone_id))
+        
+        await db.commit()
+        return order_number
