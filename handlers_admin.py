@@ -3,57 +3,74 @@ from aiogram.types import CallbackQuery, Message
 from aiogram.filters import Command
 
 from config import ADMIN_IDS
-from database import confirm_payment, complete_order, get_order, get_statistics
+from database import confirm_payment, complete_order, get_order, get_statistics, cancel_order, get_order_by_number
 
 router = Router()
 
-@router.callback_query(F.data.startswith("admin_confirm_"))
-async def admin_confirm_payment(callback: CallbackQuery, bot):
-    """Admin to'lovni tasdiqlaydi"""
+@router.callback_query(F.data.startswith("confirm_"))
+async def confirm_payment_callback(callback: CallbackQuery, bot):
+    """To'lovni tasdiqlash"""
     if callback.from_user.id not in ADMIN_IDS:
         await callback.answer("❌ Sizda ruxsat yo'q!")
         return
     
-    order_number = callback.data.replace("admin_confirm_", "")
+    order_number = callback.data.replace("confirm_", "")
     
-    print(f"✅ Admin confirming payment: {order_number}")
-    
-    # Buyurtmani yangilash
+    # Statusni yangilash
     await confirm_payment(order_number)
     
     # Buyurtma ma'lumotlarini olish
-    order = await get_order(order_number)
+    order = await get_order_by_number(order_number)
     
     if not order:
         await callback.answer("❌ Buyurtma topilmadi!")
         return
     
-    user_id = order[2]  # user_id
+    user_id = order[2]
+    screenshot_id = order[7]
     
-    print(f"✅ Sending payment confirmed message to user: {user_id}")
+    # Yangilangan caption
+    updated_caption = (
+        f"{callback.message.caption}\n\n"
+        f"✅ To'lov tasdiqlandi!\n"
+        f"👤 Admin: @{callback.from_user.username or 'admin'}"
+    )
     
-    # Userga xabar
+    # BARCHA adminlarga yangilangan xabar yuborish
+    from keyboards import delivery_keyboard
+    
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.send_photo(
+                chat_id=admin_id,
+                photo=screenshot_id,
+                caption=updated_caption,
+                reply_markup=delivery_keyboard(order_number),
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            print(f"❌ Admin {admin_id} ga yangilanish yuborilmadi: {e}")
+    
+    # User ga xabar
     try:
         await bot.send_message(
-            chat_id=user_id,
-            text=(
-                f"✅ <b>To'lov tasdiqlandi!</b>\n\n"
-                f"📋 Buyurtma: #{order_number}\n"
-                f"💎 Almaz 5-10 daqiqada yuboriladi!\n\n"
-                f"Iltimos kuting... ⏳"
-            ),
+            user_id,
+            f"✅ <b>To'lovingiz tasdiqlandi!</b>\n\n"
+            f"📋 Buyurtma: #{order_number}\n"
+            f"⏳ Tez orada almaz yuboriladi!",
             parse_mode="HTML"
         )
-        print("✅ Message sent successfully!")
     except Exception as e:
-        print(f"❌ Error sending message: {e}")
+        print(f"❌ User ga xabar yuborilmadi: {e}")
     
-    # Admin xabarini yangilash
-    await callback.message.edit_caption(
-        caption=callback.message.caption + "\n\n✅ <b>TO'LOV TASDIQLANDI</b>",
-        reply_markup=callback.message.reply_markup,
-        parse_mode="HTML"
-    )
+    # Hozirgi admin uchun eski xabarni yangilash
+    try:
+        await callback.message.edit_caption(
+            caption=updated_caption,
+            reply_markup=delivery_keyboard(order_number)
+        )
+    except:
+        pass  # Agar edit qilib bo'lmasa, skip
     
     await callback.answer("✅ To'lov tasdiqlandi!")
 
@@ -78,12 +95,32 @@ async def admin_complete_order(callback: CallbackQuery, bot):
         await callback.answer("❌ Buyurtma topilmadi!")
         return
     
-    user_id = order[2]  # user_id
-    diamonds = order[3]  # diamonds
+    user_id = order[2]
+    diamonds = order[3]
+    screenshot_id = order[7]
     
-    print(f"💎 Sending completion message to user: {user_id}")
+    # Yangilangan caption
+    updated_caption = (
+        f"{callback.message.caption}\n\n"
+        f"💎 Yuborildi!\n"
+        f"👤 Admin: @{callback.from_user.username or 'admin'}"
+    )
+    
+    # BARCHA adminlarga yangilangan xabar yuborish
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.send_photo(
+                chat_id=admin_id,
+                photo=screenshot_id,
+                caption=updated_caption,
+                reply_markup=None,
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            print(f"❌ Admin {admin_id} ga yangilanish yuborilmadi: {e}")
     
     # Userga xabar
+    print(f"💎 Sending completion message to user: {user_id}")
     try:
         await bot.send_message(
             chat_id=user_id,
@@ -100,11 +137,11 @@ async def admin_complete_order(callback: CallbackQuery, bot):
     except Exception as e:
         print(f"❌ Error sending completion message: {e}")
     
-    # Admin xabarini yangilash
+    # Hozirgi admin uchun eski xabarni yangilash
     try:
         await callback.message.edit_caption(
-            caption=callback.message.caption + "\n\n🎉 <b>BAJARILDI!</b>",
-            reply_markup=None,  # Tugmalarni olib tashlash
+            caption=updated_caption,
+            reply_markup=None,
             parse_mode="HTML"
         )
     except Exception as e:
@@ -121,6 +158,9 @@ async def admin_cancel_order(callback: CallbackQuery, bot):
     
     order_number = callback.data.replace("admin_cancel_", "")
     
+    # Statusni yangilash
+    await cancel_order(order_number)
+    
     # Buyurtma ma'lumotlarini olish
     order = await get_order(order_number)
     
@@ -128,7 +168,28 @@ async def admin_cancel_order(callback: CallbackQuery, bot):
         await callback.answer("❌ Buyurtma topilmadi!")
         return
     
-    user_id = order[2]  # user_id
+    user_id = order[2]
+    screenshot_id = order[7]
+    
+    # Yangilangan caption
+    updated_caption = (
+        f"{callback.message.caption}\n\n"
+        f"❌ Bekor qilindi!\n"
+        f"👤 Admin: @{callback.from_user.username or 'admin'}"
+    )
+    
+    # BARCHA adminlarga yangilangan xabar yuborish
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.send_photo(
+                chat_id=admin_id,
+                photo=screenshot_id,
+                caption=updated_caption,
+                reply_markup=None,
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            print(f"❌ Admin {admin_id} ga yangilanish yuborilmadi: {e}")
     
     # Userga xabar
     try:
@@ -145,12 +206,15 @@ async def admin_cancel_order(callback: CallbackQuery, bot):
     except Exception as e:
         print(f"❌ Error sending cancel message: {e}")
     
-    # Admin xabarini yangilash
-    await callback.message.edit_caption(
-        caption=callback.message.caption + "\n\n❌ <b>BEKOR QILINDI</b>",
-        reply_markup=None,
-        parse_mode="HTML"
-    )
+    # Hozirgi admin uchun eski xabarni yangilash
+    try:
+        await callback.message.edit_caption(
+            caption=updated_caption,
+            reply_markup=None,
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        print(f"❌ Error editing caption: {e}")
     
     await callback.answer("❌ Bekor qilindi!")
 

@@ -209,3 +209,21 @@ async def get_user(user_id: int):
             (user_id,)
         )
         return await cursor.fetchone()
+    
+async def get_order_by_number(order_number: str):
+    """Buyurtmani order number bo'yicha olish"""
+    async with aiosqlite.connect(DB_NAME) as db:
+        cursor = await db.execute(
+            "SELECT * FROM orders WHERE order_number = ?",
+            (order_number,)
+        )
+        return await cursor.fetchone()
+
+async def cancel_order(order_number: str):
+    """Buyurtmani bekor qilish"""
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute(
+            "UPDATE orders SET status = 'cancelled' WHERE order_number = ?",
+            (order_number,)
+        )
+        await db.commit()
