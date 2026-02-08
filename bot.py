@@ -23,6 +23,7 @@ async def main():
     
     # Database yaratish
     await init_db()
+    print("✅ Database initialized")
     
     # Bot va Dispatcher
     bot = Bot(token=BOT_TOKEN)
@@ -38,6 +39,7 @@ async def main():
     # Botni ishga tushirish
     print("✅ Bot ishga tushdi!")
     print("🔄 Paketlar har 5 daqiqada avtomatik yangilanadi!")
+    print("💎 Admin real-time sync enabled!")
     await dp.start_polling(bot)
 
 if __name__ == '__main__':

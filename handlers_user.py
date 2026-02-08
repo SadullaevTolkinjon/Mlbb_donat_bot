@@ -7,7 +7,7 @@ import re
 
 from config import WELCOME_TEXT, ORDER_CREATED_TEXT, PAYMENT_CARD, PAYMENT_PHONE, PAYMENT_NAME, ADMIN_IDS, CHANNEL_ID, CHANNEL_USERNAME, CHANNEL_LINK, WELCOME_PHOTO
 from keyboards import main_menu, confirm_order_keyboard
-from database import add_user, create_order, update_screenshot, get_statistics
+from database import add_user, create_order, update_screenshot, get_statistics, save_admin_notification  # ✅ QOSHILDI
 
 router = Router()
 
@@ -17,6 +17,7 @@ class OrderStates(StatesGroup):
 
 # Vaqtinchalik data
 temp_orders = {}
+
 @router.message(CommandStart())
 async def cmd_start(message: Message, bot):
     """Start command handler"""
@@ -87,13 +88,14 @@ async def cmd_start(message: Message, bot):
         )
     
     print("✅ Welcome message sent!")
+
 @router.callback_query(F.data == "check_subscription")
 async def check_subscription(callback: CallbackQuery, bot):
     """Kanal a'zoligini tekshirish"""
     user_id = callback.from_user.id
     
     # Admin emas
-    if user_id in ADMIN_IDS:  # ← TO'G'RI
+    if user_id in ADMIN_IDS:
         await callback.answer("Siz adminsiz!")
         return
     
@@ -133,10 +135,11 @@ async def check_subscription(callback: CallbackQuery, bot):
     except Exception as e:
         print(f"❌ Xatolik: {e}")
         await callback.answer("❌ Xatolik! Qaytadan urinib ko'ring.")
+
 @router.message(F.text == "💎 Almaz sotib olish")
 async def show_packages(message: Message, state: FSMContext):
     """Paket kategoriyalari"""
-    await state.clear()  # State ni tozalash
+    await state.clear()
     
     print("✅ Packages button clicked")
     from keyboards import package_categories
@@ -176,6 +179,7 @@ async def show_double_packages(callback: CallbackQuery):
         parse_mode="HTML"
     )
     await callback.answer()
+
 @router.callback_query(F.data == "category_weekly")
 async def show_weekly_pass(callback: CallbackQuery):
     """Haftalik/Oylik pass"""
@@ -211,18 +215,15 @@ async def show_weekly_pass(callback: CallbackQuery):
     )
     await callback.answer()
 
-
-@router.callback_query(F.data.regexp(r'^weekly_\d+$'))  # ← ANIQ FILTER
+@router.callback_query(F.data.regexp(r'^weekly_\d+$'))
 async def select_weekly_pass(callback: CallbackQuery, state: FSMContext):
     """Haftalik/Oylik pass tanlash"""
-    # Index ni olish
     try:
         index = int(callback.data.split("_")[1])
     except (IndexError, ValueError):
         await callback.answer("❌ Xatolik!")
         return
     
-    # Config dan paketni olish
     from config import WEEKLY_PASS
     
     if index >= len(WEEKLY_PASS):
@@ -258,6 +259,7 @@ async def select_weekly_pass(callback: CallbackQuery, state: FSMContext):
     
     await state.set_state(OrderStates.waiting_for_id_and_zone)
     await callback.answer()
+
 @router.callback_query(F.data == "back_to_categories")
 async def back_to_categories(callback: CallbackQuery):
     """Kategoriyalarga qaytish"""
@@ -325,9 +327,6 @@ async def get_id_and_zone(message: Message, state: FSMContext):
     """ID va Zone ID ni birga qabul qilish"""
     text = message.text.strip()
     
-    # Regex pattern - 2 ta alohida raqam bo'lishi shart
-    # Player ID: 6-12 raqam
-    # Zone ID: 2-5 raqam
     pattern = r'^(\d{6,12})\s*[\(\s]+(\d{2,5})[\)\s]*$'
     match = re.match(pattern, text)
     
@@ -343,17 +342,16 @@ async def get_id_and_zone(message: Message, state: FSMContext):
     player_id = match.group(1)
     zone_id = match.group(2)
     
-    # Saqlash
     order_data = temp_orders[message.from_user.id]
     order_data["player_id"] = player_id
     order_data["zone_id"] = zone_id
+    
     package_type = order_data.get('type', 'regular')
     if package_type == 'weekly':
         package_text = f"🌟 {order_data.get('pass_name', 'Haftalik Pass')}"
     else:
         package_text = f"💎 {order_data['diamonds']} Almaz"
     
-    # Tasdiqlash
     await message.answer(
         f"📋 <b>Buyurtmani tasdiqlang:</b>\n\n"
         f"📦 Paket: {package_text}\n"
@@ -366,6 +364,7 @@ async def get_id_and_zone(message: Message, state: FSMContext):
     )
     
     await state.clear()
+
 @router.callback_query(F.data.startswith("confirm_"))
 async def confirm_order(callback: CallbackQuery, bot):
     """Tasdiqlash"""
@@ -399,13 +398,14 @@ async def confirm_order(callback: CallbackQuery, bot):
     await callback.message.edit_text(payment_text, parse_mode="HTML")
     await callback.message.answer("📸 <b>Screenshot yuborishni kutmoqdamiz...</b>", parse_mode="HTML")
     await callback.answer()
+
 @router.message(F.photo)
 async def receive_screenshot(message: Message, bot):
     """Screenshot yoki Photo ID olish"""
     user_id = message.from_user.id
     
     # Admin file_id olmoqchi
-    if user_id in ADMIN_IDS:  # ← O'ZGARDI
+    if user_id in ADMIN_IDS:
         file_id = message.photo[-1].file_id
         await message.answer(
             f"📸 <b>Photo File ID:</b>\n\n"
@@ -421,7 +421,6 @@ async def receive_screenshot(message: Message, bot):
         await message.answer("❌ Avval buyurtma bering!")
         return
     
-    # Screenshot qabul qilish davom etadi...
     order_number = temp_orders[user_id]["order_number"]
     order_data = temp_orders[user_id]
     file_id = message.photo[-1].file_id
@@ -439,7 +438,6 @@ async def receive_screenshot(message: Message, bot):
     from keyboards import admin_order_keyboard
     
     # Paket turini aniqlash
-    # Paket turini aniqlash
     package_type = order_data.get('type', 'regular')
     if package_type == 'double':
         package_info = f"2X {order_data['diamonds']} 💎"
@@ -447,39 +445,44 @@ async def receive_screenshot(message: Message, bot):
         pass_name = order_data.get('pass_name', 'Pass')
         description = order_data.get('description', '')
         if description:
-           package_info = f"🌟 {pass_name}\n📝 {description}"
+            package_info = f"🌟 {pass_name}\n📝 {description}"
         else:
-           package_info = f"🌟 {pass_name}"
+            package_info = f"🌟 {pass_name}"
     else:
-     package_info = f"{order_data['diamonds']} 💎"
+        package_info = f"{order_data['diamonds']} 💎"
     
-    # Admin xabari
     id_format = f"{order_data['player_id']} ({order_data['zone_id']})"
 
     admin_text = (
-    f"🔔 <b>YANGI BUYURTMA!</b>\n\n"
-    f"📋 Buyurtma: #{order_number}\n"
-    f"👤 User: @{message.from_user.username or 'username_yoq'}\n"
-    f"💎 Paket: {package_info}\n"
-    f"💰 Summa: {order_data['price']:,} so'm\n"
-    f"🆔 ID: <code>{id_format}</code>\n\n"
-    f"📸 Screenshot:"
+        f"🔔 <b>YANGI BUYURTMA!</b>\n\n"
+        f"📋 Buyurtma: #{order_number}\n"
+        f"👤 User: @{message.from_user.username or 'username_yoq'}\n"
+        f"💎 Paket: {package_info}\n"
+        f"💰 Summa: {order_data['price']:,} so'm\n"
+        f"🆔 ID: <code>{id_format}</code>\n\n"
+        f"📸 Screenshot:"
     )
     
-    # BARCHA adminlarga yuborish
+    # ✅ BARCHA ADMINLARGA YUBORISH VA MESSAGE_ID SAQLASH
     for admin_id in ADMIN_IDS:
         try:
-            await bot.send_photo(
+            sent_message = await bot.send_photo(
                 chat_id=admin_id,
                 photo=file_id,
                 caption=admin_text,
                 reply_markup=admin_order_keyboard(order_number),
                 parse_mode="HTML"
             )
+            
+            # ✅ MESSAGE_ID NI SAQLASH
+            await save_admin_notification(order_number, admin_id, sent_message.message_id)
+            print(f"✅ Admin {admin_id} ga yuborildi, message_id={sent_message.message_id}")
+            
         except Exception as e:
             print(f"❌ Admin {admin_id} ga yuborib bo'lmadi: {e}")
     
     del temp_orders[user_id]
+
 @router.callback_query(F.data == "cancel")
 async def cancel_order(callback: CallbackQuery, state: FSMContext):
     """Bekor qilish"""
@@ -488,10 +491,11 @@ async def cancel_order(callback: CallbackQuery, state: FSMContext):
         del temp_orders[callback.from_user.id]
     await callback.message.edit_text("❌ Bekor qilindi!")
     await callback.answer()
+
 @router.message(F.text == "📦 Mening buyurtmalarim")
 async def my_orders(message: Message, state: FSMContext):
     """Foydalanuvchi buyurtmalari"""
-    await state.clear()  # State ni tozalash
+    await state.clear()
     
     from database import get_user_orders
     
@@ -514,7 +518,6 @@ async def my_orders(message: Message, state: FSMContext):
         status = order[8]
         created_at = order[9]
         
-        # Status emoji
         if status == 'completed':
             status_emoji = '✅'
             status_text = 'Bajarildi'
@@ -541,9 +544,10 @@ async def my_orders(message: Message, state: FSMContext):
         text += "\n📝 Faqat so'ngi 20 ta ko'rsatildi"
     
     await message.answer(text, parse_mode="HTML")
+
 @router.message(F.text == "ℹ️ Ma'lumot")
 async def info(message: Message, state: FSMContext):
-    await state.clear()  # State ni tozalash
+    await state.clear()
     
     await message.answer(
         "ℹ️ <b>Bot haqida:</b>\n\n"
@@ -555,7 +559,7 @@ async def info(message: Message, state: FSMContext):
 
 @router.message(F.text == "📞 Aloqa")
 async def contact(message: Message, state: FSMContext):
-    await state.clear()  # State ni tozalash
+    await state.clear()
     
     await message.answer(
         "📞 <b>Bog'lanish:</b>\n\n"
@@ -577,21 +581,16 @@ async def switch_to_user_mode(message: Message):
         reply_markup=main_menu(),
         parse_mode="HTML"
     )
+
 @router.message(F.text == "📊 Statistika")
 async def admin_stats(message: Message):
     """Statistika (admin)"""
-    print(f"🔍 Statistika tugmasi bosildi. User ID: {message.from_user.id}, Admin IDs: {ADMIN_IDS}")  # ← O'ZGARDI
-    
-    if message.from_user.id not in ADMIN_IDS:  # ← O'ZGARDI
-        print("❌ Bu user admin emas!")
+    if message.from_user.id not in ADMIN_IDS:
         return
-    
-    print("✅ Admin tasdiqlandi, statistika yuklanmoqda...")
     
     try:
         from database import get_statistics
         stats = await get_statistics()
-        print(f"✅ Statistika olindi: {stats}")
         
         text = (
             f"📊 <b>STATISTIKA</b>\n\n"
@@ -604,7 +603,6 @@ async def admin_stats(message: Message):
         )
         
         await message.answer(text, parse_mode="HTML")
-        print("✅ Statistika yuborildi!")
         
     except Exception as e:
         print(f"❌ Xatolik: {e}")
@@ -656,12 +654,12 @@ async def completed_orders_list(message: Message):
     
     text = "✅ <b>BAJARILGAN BUYURTMALAR:</b>\n\n"
     
-    for order in orders[:20]:  # Faqat 20 ta ko'rsatish
+    for order in orders[:20]:
         order_number = order[1]
         diamonds = order[3]
         price = order[4]
         player_id = order[5]
-        completed_at = order[10]  # completed_at
+        completed_at = order[10]
         
         text += (
             f"📋 #{order_number}\n"
@@ -700,12 +698,10 @@ async def all_orders(message: Message):
         status = order[8]
         created_at = order[9]
         
-        # User ma'lumotini olish
         from database import get_user
         user = await get_user(user_id)
         username = f"@{user[1]}" if user and user[1] else "username_yoq"
         
-        # Status emoji
         if status == 'completed':
             status_emoji = '✅'
         elif status == 'payment_confirmed':
@@ -897,8 +893,7 @@ async def edit_payment_field(callback: CallbackQuery):
         parse_mode="HTML"
     )
     await callback.answer()
-    
-    
+
 @router.message(F.photo)
 async def get_photo_id(message: Message):
     """Photo ID olish (vaqtinchalik)"""

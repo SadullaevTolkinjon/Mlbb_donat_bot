@@ -32,6 +32,17 @@ async def init_db():
             )
         """)
         
+        # ✅ YANGI: Admin notifications jadvali (real-time sync uchun)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS admin_notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                order_number TEXT NOT NULL,
+                admin_id INTEGER NOT NULL,
+                message_id INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
         await db.commit()
     print("✅ Database initialized")
 
@@ -97,10 +108,10 @@ async def complete_order(order_number: str):
         await db.commit()
 
 async def get_pending_orders():
-    """Kutayotgan buyurtmalar"""
+    """Kutayotgan buyurtmalar (screenshot yuborilgan)"""
     async with aiosqlite.connect(DB_NAME) as db:
         cursor = await db.execute(
-            "SELECT * FROM orders WHERE status = 'screenshot_sent' ORDER BY created_at DESC"
+            "SELECT * FROM orders WHERE status = 'screenshot_sent' ORDER BY created_at DESC LIMIT 20"
         )
         return await cursor.fetchall()
 
@@ -125,19 +136,7 @@ async def get_statistics():
             'total_count': total[0] or 0,
             'total_amount': total[1] or 0
         }
-        
-        
-        
-        
-async def get_pending_orders():
-    """Kutayotgan buyurtmalar (screenshot yuborilgan)"""
-    async with aiosqlite.connect(DB_NAME) as db:
-        cursor = await db.execute(
-            "SELECT * FROM orders WHERE status = 'screenshot_sent' ORDER BY created_at DESC LIMIT 20"
-        )
-        return await cursor.fetchall()
-    
-    
+
 async def get_completed_orders():
     """Bajarilgan buyurtmalar"""
     async with aiosqlite.connect(DB_NAME) as db:
@@ -224,6 +223,38 @@ async def cancel_order(order_number: str):
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute(
             "UPDATE orders SET status = 'cancelled' WHERE order_number = ?",
+            (order_number,)
+        )
+        await db.commit()
+
+
+
+
+async def save_admin_notification(order_number: str, admin_id: int, message_id: int):
+    """Admin message_id ni saqlash (real-time sync uchun)"""
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute(
+            "INSERT INTO admin_notifications (order_number, admin_id, message_id) VALUES (?, ?, ?)",
+            (order_number, admin_id, message_id)
+        )
+        await db.commit()
+
+async def get_admin_notifications(order_number: str):
+    """Buyurtma uchun barcha admin message_id larini olish"""
+    async with aiosqlite.connect(DB_NAME) as db:
+        cursor = await db.execute(
+            "SELECT admin_id, message_id FROM admin_notifications WHERE order_number = ?",
+            (order_number,)
+        )
+        rows = await cursor.fetchall()
+        # Dictionary qaytaramiz: {admin_id: message_id}
+        return {row[0]: row[1] for row in rows}
+
+async def delete_admin_notifications(order_number: str):
+    """Buyurtma bajarilgandan keyin admin notificationlarni o'chirish (optional)"""
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute(
+            "DELETE FROM admin_notifications WHERE order_number = ?",
             (order_number,)
         )
         await db.commit()

@@ -156,3 +156,21 @@ def texts_edit_keyboard():
         [InlineKeyboardButton(text="🔙 Orqaga", callback_data="settings_menu")]
     ])
     return keyboard
+
+def delivery_keyboard(order_number: str):
+    """Admin uchun yetkazib berish tugmalari"""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="💎 Yuborildi", 
+                callback_data=f"admin_complete_{order_number}"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="❌ Rad etish", 
+                callback_data=f"admin_cancel_{order_number}"
+            )
+        ]
+    ])
+    return keyboard
