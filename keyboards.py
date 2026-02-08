@@ -174,7 +174,6 @@ def delivery_keyboard(order_number: str):
         ]
     ])
     return keyboard
-
 def quantity_keyboard(callback_prefix: str, item_name: str, price: int):
     """Miqdor tanlash klaviaturasi (1-10)"""
     buttons = []
@@ -182,21 +181,20 @@ def quantity_keyboard(callback_prefix: str, item_name: str, price: int):
     # 1-5 birinchi qator
     row1 = []
     for i in range(1, 6):
-        total = price * i
         row1.append(
             InlineKeyboardButton(
-                text=f"{i} ({total:,} so'm)",
+                text=f"{i}",  # ✅ FAQAT RAQAM
                 callback_data=f"qty_{callback_prefix}_{i}"
             )
         )
     buttons.append(row1)
     
+    # 6-10 ikkinchi qator
     row2 = []
     for i in range(6, 11):
-        total = price * i
         row2.append(
             InlineKeyboardButton(
-                text=f"{i} ({total:,} so'm)",
+                text=f"{i}",  # ✅ FAQAT RAQAM
                 callback_data=f"qty_{callback_prefix}_{i}"
             )
         )
